@@ -248,6 +248,20 @@
 
 **影响**：`Sessions.vue goToDetail`、`Dashboard.vue goToSession` 各加一行转换；`SessionDetail.vue` 读取 `history.state?.session` 的逻辑不变。后续若有其他页面用 `router.push({ state: { ... } })` 传 reactive 数据，同样需要做此转换。
 
+### 41. 评分功能通过添加反向关联实现嵌套 eager loading
+
+**背景**：学生端预约列表需要展示"是否已评价"和评分结果，`submitFeedback` 接口需要 `sessionId`（来自 sessions 表）。原 `getAppointments` 查询只 include 了咨询师信息，没有 session 和 feedback。
+
+**决策**：在 `models/index.js` 补充两条反向关联：
+- `Appointment.hasOne(Session, { foreignKey: 'appointmentId', as: 'session' })`
+- `Session.hasOne(Feedback, { foreignKey: 'sessionId', as: 'feedback' })`
+
+修改 `student.service.js getAppointments()`，新增两层嵌套 include（均为 `required: false`，即 LEFT JOIN），使每条预约记录携带 `apt.session` 和 `apt.session.feedback`。
+
+**原因**：`required: false` 保证无 session 的预约（pending/confirmed/cancelled 状态）仍正常返回，不被 INNER JOIN 过滤掉；一次查询获取所有所需数据，无需前端额外发请求。反向关联只在 `index.js` 中定义，不影响各模型文件本身，保持关联关系集中管理（决策 13）。
+
+**影响**：前端 `Appointments.vue` 可直接读 `apt.session?.id` 拿到 `sessionId`，读 `apt.session?.feedback` 判断是否已评价。`canRate(apt)` 条件：`apt.status === 'completed' && apt.session && !apt.session.feedback`。
+
 ### 35. 使用指南文档结构选择
 **背景**：项目文档需要面向多类读者（学生/咨询师/管理员/开发者）。
 **决策**：将使用指南输出为独立的 `docs/使用指南.md`，面向四类读者分章节撰写，API 章节完全基于实际路由和 service 代码提取，不虚构接口。

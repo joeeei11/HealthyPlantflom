@@ -54,13 +54,29 @@
           <span class="reason-label">取消原因：</span>{{ apt.cancelReason }}
         </div>
 
+        <!-- 已评价展示 -->
+        <div v-if="apt.session?.feedback" class="feedback-display">
+          <span class="feedback-stars">{{ renderStars(apt.session.feedback.rating) }}</span>
+          <span class="feedback-rated">已评价</span>
+          <span v-if="apt.session.feedback.content" class="feedback-text">{{ apt.session.feedback.content }}</span>
+        </div>
+
         <div class="apt-actions">
+          <!-- 取消按钮 -->
           <button
             v-if="canCancel(apt)"
             class="btn-cancel-apt"
             @click="openCancelDialog(apt)"
           >
             取消预约
+          </button>
+          <!-- 评分按钮：已完成、有 session、未评价 -->
+          <button
+            v-if="canRate(apt)"
+            class="btn-rate"
+            @click="openRateDialog(apt)"
+          >
+            评分
           </button>
         </div>
       </div>
@@ -97,6 +113,55 @@
       </div>
     </div>
 
+    <!-- 评分弹窗 -->
+    <div v-if="rateDialog.open" class="modal-mask" @click.self="closeRateDialog">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>咨询评价</h3>
+          <button class="modal-close" @click="closeRateDialog">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-tip">
+            请对与 <strong>{{ rateDialog.apt?.counselor?.counselorProfile?.realName || rateDialog.apt?.counselor?.username }}</strong>
+            于 {{ rateDialog.apt?.appointmentDate }} 的咨询进行评价
+          </p>
+          <!-- 星级选择 -->
+          <div class="form-item">
+            <label>评分（必填）</label>
+            <div class="star-picker">
+              <button
+                v-for="n in 5"
+                :key="n"
+                :class="['star-btn', { active: rateDialog.rating >= n }]"
+                @click="rateDialog.rating = n"
+                type="button"
+              >★</button>
+              <span class="star-hint">{{ rateHint[rateDialog.rating] || '请选择星级' }}</span>
+            </div>
+          </div>
+          <!-- 文字评价 -->
+          <div class="form-item">
+            <label>评价内容（选填）</label>
+            <textarea v-model="rateDialog.content" rows="3" placeholder="请分享您的咨询体验..."></textarea>
+          </div>
+          <!-- 匿名选项 -->
+          <div class="form-item checkbox-item">
+            <label>
+              <input type="checkbox" v-model="rateDialog.isAnonymous" />
+              匿名提交
+            </label>
+          </div>
+          <p v-if="rateError" class="error-msg">{{ rateError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" @click="closeRateDialog" :disabled="rating">取消</button>
+          <button class="btn-primary" @click="confirmRate" :disabled="rating || !rateDialog.rating">
+            {{ rating ? '提交中...' : '提交评价' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 成功提示 -->
     <div v-if="successMsg" class="toast">{{ successMsg }}</div>
   </div>
@@ -115,12 +180,22 @@ const currentTab = ref('')
 
 const cancelling = ref(false)
 const cancelError = ref('')
+const rating = ref(false)
+const rateError = ref('')
 const successMsg = ref('')
 
 const cancelDialog = reactive({
   open: false,
   apt: null,
   reason: '',
+})
+
+const rateDialog = reactive({
+  open: false,
+  apt: null,
+  rating: 0,
+  content: '',
+  isAnonymous: false,
 })
 
 const tabs = [
@@ -144,6 +219,14 @@ const typeLabel = {
   phone: '电话',
 }
 
+const rateHint = {
+  1: '很差',
+  2: '较差',
+  3: '一般',
+  4: '满意',
+  5: '非常满意',
+}
+
 function getAvatarLetter(apt) {
   const name = apt.counselor?.counselorProfile?.realName || apt.counselor?.username || '?'
   return name.charAt(0).toUpperCase()
@@ -151,6 +234,14 @@ function getAvatarLetter(apt) {
 
 function canCancel(apt) {
   return ['pending', 'confirmed'].includes(apt.status)
+}
+
+function canRate(apt) {
+  return apt.status === 'completed' && apt.session && !apt.session.feedback
+}
+
+function renderStars(n) {
+  return '★'.repeat(n) + '☆'.repeat(5 - n)
 }
 
 async function loadList() {
@@ -208,6 +299,41 @@ async function confirmCancel() {
     cancelError.value = e.message || '取消失败，请重试'
   } finally {
     cancelling.value = false
+  }
+}
+
+function openRateDialog(apt) {
+  rateDialog.open = true
+  rateDialog.apt = apt
+  rateDialog.rating = 0
+  rateDialog.content = ''
+  rateDialog.isAnonymous = false
+  rateError.value = ''
+}
+
+function closeRateDialog() {
+  rateDialog.open = false
+  rateDialog.apt = null
+}
+
+async function confirmRate() {
+  if (!rateDialog.rating) return
+  rating.value = true
+  rateError.value = ''
+  try {
+    await studentApi.submitFeedback({
+      sessionId: rateDialog.apt.session.id,
+      rating: rateDialog.rating,
+      content: rateDialog.content || undefined,
+      isAnonymous: rateDialog.isAnonymous,
+    })
+    closeRateDialog()
+    showSuccess('评价提交成功，感谢您的反馈！')
+    loadList()
+  } catch (e) {
+    rateError.value = e.message || '提交失败，请重试'
+  } finally {
+    rating.value = false
   }
 }
 
@@ -381,6 +507,39 @@ h2 {
   font-weight: 500;
 }
 
+/* 已评价展示 */
+.feedback-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #f0fdf4;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.feedback-stars {
+  color: #f59e0b;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+.feedback-rated {
+  color: #059669;
+  font-weight: 500;
+}
+
+.feedback-text {
+  color: #64748b;
+  border-left: 1px solid #d1fae5;
+  padding-left: 10px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .apt-actions {
   display: flex;
   gap: 8px;
@@ -400,6 +559,21 @@ h2 {
 
 .btn-cancel-apt:hover {
   background: #fef2f2;
+}
+
+.btn-rate {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-rate:hover {
+  opacity: 0.88;
 }
 
 .pagination {
@@ -487,6 +661,7 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-bottom: 14px;
 }
 
 .form-item label {
@@ -509,6 +684,49 @@ h2 {
 
 .form-item textarea:focus {
   border-color: #667eea;
+}
+
+.checkbox-item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #475569;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+/* 星级选择器 */
+.star-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #d1d5db;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s, transform 0.1s;
+}
+
+.star-btn:hover,
+.star-btn.active {
+  color: #f59e0b;
+}
+
+.star-btn:hover {
+  transform: scale(1.15);
+}
+
+.star-hint {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-left: 8px;
 }
 
 .error-msg {
@@ -560,6 +778,26 @@ h2 {
 
 .btn-danger:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 22px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

@@ -154,16 +154,30 @@ async function getAppointments(studentId, { status, page = 1, pageSize = 10 } = 
 
   const { count, rows } = await Appointment.findAndCountAll({
     where,
-    include: [{
-      model: User,
-      as: 'counselor',
-      attributes: ['id', 'username', 'avatarUrl'],
-      include: [{
-        model: CounselorProfile,
-        as: 'counselorProfile',
-        attributes: ['realName', 'title'],
-      }],
-    }],
+    include: [
+      {
+        model: User,
+        as: 'counselor',
+        attributes: ['id', 'username', 'avatarUrl'],
+        include: [{
+          model: CounselorProfile,
+          as: 'counselorProfile',
+          attributes: ['realName', 'title'],
+        }],
+      },
+      {
+        model: Session,
+        as: 'session',
+        required: false,
+        attributes: ['id', 'status'],
+        include: [{
+          model: Feedback,
+          as: 'feedback',
+          required: false,
+          attributes: ['id', 'rating', 'content', 'isAnonymous'],
+        }],
+      },
+    ],
     order: [['appointmentDate', 'DESC'], ['startTime', 'DESC']],
     limit,
     offset,

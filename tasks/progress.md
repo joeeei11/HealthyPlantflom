@@ -241,6 +241,16 @@
   - `Appointments.vue` 的 `startSession` 无需修改（`res.data` 已是 Axios 返回的纯对象）
   - **构建**：vite build 通过，0 错误，122 模块
 
+### 学生端评分功能（阶段 15）（2026-03-10）
+- [x] `backend/src/models/index.js` — 新增 `Appointment.hasOne(Session, as:'session')` + `Session.hasOne(Feedback, as:'feedback')` 反向关联
+- [x] `backend/src/services/student.service.js` — `getAppointments()` 改为同时 include Session（required:false）及其 Feedback（required:false），返回 `apt.session.id` + `apt.session.feedback`
+- [x] `frontend/src/views/student/Appointments.vue` — 完整评分功能：
+  - 已完成预约 + 有 session + 未评价 → 显示紫色"评分"按钮
+  - 已评价 → 显示金色星级 + "已评价" + 评价摘要（绿色背景栏）
+  - 评分弹窗：5 星点选（悬停高亮/放大）+ 文字评价（选填）+ 匿名勾选
+  - 提交成功后重新加载列表，按钮自动变为已评价状态
+  - `vite build` 通过，0 错误，122 模块
+
 ## 当前阻塞
 无。
 

@@ -22,6 +22,7 @@ Appointment.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 Appointment.belongsTo(User, { foreignKey: 'counselorId', as: 'counselor' });
 
 // ── Session ↔ Appointment / User ─────────────────────────────────────────────
+Appointment.hasOne(Session, { foreignKey: 'appointmentId', as: 'session' });
 Session.belongsTo(Appointment, { foreignKey: 'appointmentId', as: 'appointment' });
 Session.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 Session.belongsTo(User, { foreignKey: 'counselorId', as: 'counselor' });
@@ -32,6 +33,7 @@ SessionNote.belongsTo(Session, { foreignKey: 'sessionId', as: 'session' });
 SessionNote.belongsTo(User, { foreignKey: 'counselorId', as: 'counselor' });
 
 // ── Feedback ↔ Session / User ─────────────────────────────────────────────────
+Session.hasOne(Feedback, { foreignKey: 'sessionId', as: 'feedback' });
 Feedback.belongsTo(Session, { foreignKey: 'sessionId', as: 'session' });
 Feedback.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 Feedback.belongsTo(User, { foreignKey: 'counselorId', as: 'counselor' });
