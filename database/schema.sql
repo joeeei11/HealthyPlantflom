@@ -1,0 +1,104 @@
+-- schema.sql — 仅作参考，禁止修改
+-- 实际变更请在 database/migrations/ 目录下追加 migration 文件
+
+-- ============================================================
+-- ER 图说明 & 表关系概览
+-- ============================================================
+
+-- 【核心实体】
+--
+--  users (统一用户表)
+--    ├── role = 'student'   → student_profiles (1:1)
+--    ├── role = 'counselor' → counselor_profiles (1:1)
+--    └── role = 'school'    → 无扩展表，直接使用 users
+--
+-- ============================================================
+
+-- 【表关系一览】
+--
+--  users
+--    id PK
+--    role ENUM(student, counselor, school)
+--
+--  student_profiles
+--    user_id → users.id (1:1, CASCADE DELETE)
+--    学号、年级、专业、学院、紧急联系人
+--
+--  counselor_profiles
+--    user_id → users.id (1:1, CASCADE DELETE)
+--    职称、资质、擅长方向(JSON)、可预约时段(JSON)
+--
+--  appointments (预约记录)
+--    student_id   → users.id (student)
+--    counselor_id → users.id (counselor)
+--    一个预约对应一个咨询师+一个学生+一个时间段
+--    status: pending → confirmed → completed / cancelled / no_show
+--
+--  sessions (实际咨询会话)
+--    appointment_id → appointments.id (1:1, NULL 表示临时安排，SET NULL ON DELETE)
+--    student_id     → users.id
+--    counselor_id   → users.id
+--    一次预约最多产生一次 session
+--    status: in_progress → completed / cancelled
+--
+--  session_notes (案例笔记)
+--    session_id   → sessions.id (N:1, CASCADE DELETE)
+--    counselor_id → users.id
+--    一次 session 可有多条笔记（多次更新/追记）
+--    risk_level 供管理端做危机干预统计
+--
+--  ai_conversations (AI 对话会话)
+--    student_id → users.id (CASCADE DELETE)
+--    一个学生可有多个 AI 对话（多轮历史）
+--
+--  ai_messages (AI 消息)
+--    conversation_id → ai_conversations.id (N:1, CASCADE DELETE)
+--    role: user | assistant
+--    按 created_at 升序构成完整对话上下文
+--
+--  announcements (公告)
+--    author_id → users.id (school 角色)
+--    target_role: all | student | counselor
+--    published_at NULL = 草稿；expires_at NULL = 永不过期
+--
+--  feedback (评价)
+--    session_id   → sessions.id (1:1, 每次会话只能评价一次)
+--    student_id   → users.id
+--    counselor_id → users.id
+--    rating 1-5 分，支持匿名
+
+-- ============================================================
+-- 完整关系图（文本 ER）
+-- ============================================================
+--
+--  users ──1:1──> student_profiles
+--        ──1:1──> counselor_profiles
+--        ──1:N──> appointments (as student)
+--        ──1:N──> appointments (as counselor)
+--        ──1:N──> sessions (as student)
+--        ──1:N──> sessions (as counselor)
+--        ──1:N──> session_notes (as counselor)
+--        ──1:N──> ai_conversations (as student)
+--        ──1:N──> announcements (as author/school)
+--        ──1:N──> feedback (as student)
+--        ──1:N──> feedback (as counselor)
+--
+--  appointments ──1:1──> sessions
+--
+--  sessions ──1:N──> session_notes
+--           ──1:1──> feedback
+--
+--  ai_conversations ──1:N──> ai_messages
+--
+-- ============================================================
+-- 索引策略说明
+-- ============================================================
+--
+--  高频查询场景 → 对应索引
+--  1. 学生查自己的预约列表        → appointments(student_id)
+--  2. 咨询师查某日的预约          → appointments(counselor_id, appointment_date)
+--  3. 管理端按状态统计预约        → appointments(appointment_date, status)
+--  4. 学生查 AI 对话列表          → ai_conversations(student_id, status)
+--  5. 按风险等级查危机案例        → session_notes(risk_level)
+--  6. 查咨询师评分统计            → feedback(counselor_id, rating)
+--  7. 公告按目标+发布时间排序     → announcements(target_role, published_at)
