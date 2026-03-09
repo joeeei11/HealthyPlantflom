@@ -233,6 +233,14 @@
   - **文件**：`frontend/src/views/counselor/Appointments.vue` 第 245-250 行
   - **构建**：vite build 通过，0 错误，122 模块
 
+### Bug 修复（2026-03-09，续八）
+- [x] 咨询师端会话详情"数据不可用"Bug 修复
+  - **根因**：`Sessions.vue` / `Dashboard.vue` 的 `goToDetail(session)` / `goToSession(session)` 把 Vue 3 **reactive Proxy**（`v-for` 中的列表项）直接传给 `router.push({ state: { session } })`；Vue Router 内部调用 `history.pushState` 时，浏览器 Structured Clone Algorithm 对包含嵌套 Proxy（Vue reactive 的 `get` trap 对嵌套对象会返回新 Proxy）的对象可能序列化失败，Vue Router 捕获后会 fallback 到 `location.assign(url)`，导致整页刷新；刷新后 `history.state.session` 为 null，SessionDetail 显示"数据不可用"
+  - **修复**：在导航前加 `JSON.parse(JSON.stringify(session))` 进行深度 JSON 序列化，将 reactive Proxy 转为纯 POJO，保证 `history.pushState` 序列化成功
+  - **文件**：`frontend/src/views/counselor/Sessions.vue`（`goToDetail`）/ `Dashboard.vue`（`goToSession`）
+  - `Appointments.vue` 的 `startSession` 无需修改（`res.data` 已是 Axios 返回的纯对象）
+  - **构建**：vite build 通过，0 错误，122 模块
+
 ## 当前阻塞
 无。
 

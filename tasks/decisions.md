@@ -238,6 +238,16 @@
 
 **影响**：线下预约发起的会话 type 记录为 `individual`，线上预约发起的会话 type 记录为 `online`，语义正确。
 
+### 40. router.push state 必须传纯 POJO，不能传 Vue reactive Proxy
+
+**背景**：`Sessions.vue` / `Dashboard.vue` 从 `v-for` 的列表中获取 session 对象，列表项是 Vue 3 reactive Proxy。将 Proxy 直接传给 `router.push({ state: { session } })` 时，Vue Router 内部调用 `window.history.pushState(state, '', url)` 序列化该 state；浏览器 Structured Clone Algorithm 对包含嵌套 Vue Proxy 的对象（`get` trap 返回嵌套 Proxy）有序列化失败的风险。序列化失败后 Vue Router 静默 fallback 到 `location.assign(url)`，整页刷新，`history.state.session` 丢失。
+
+**决策**：在所有 `router.push({ state: { ... } })` 调用中，对来自 Vue reactive 数组的数据先执行 `JSON.parse(JSON.stringify(session))` 转为纯 POJO，再传入 state。来自 Axios 响应（`res.data`）的数据本身是纯对象，无需转换。
+
+**原因**：JSON roundtrip 是最可靠的"reactive → plain"转换手段，不依赖 `toRaw`（只去掉顶层 Proxy）或 `markRaw`（需要在数据来源处标记）；改动范围最小，只影响导航调用处，不影响组件内的响应式逻辑。
+
+**影响**：`Sessions.vue goToDetail`、`Dashboard.vue goToSession` 各加一行转换；`SessionDetail.vue` 读取 `history.state?.session` 的逻辑不变。后续若有其他页面用 `router.push({ state: { ... } })` 传 reactive 数据，同样需要做此转换。
+
 ### 35. 使用指南文档结构选择
 **背景**：项目文档需要面向多类读者（学生/咨询师/管理员/开发者）。
 **决策**：将使用指南输出为独立的 `docs/使用指南.md`，面向四类读者分章节撰写，API 章节完全基于实际路由和 service 代码提取，不虚构接口。

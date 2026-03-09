@@ -124,7 +124,8 @@ function showToast(msg) {
 }
 
 function goToSession(session) {
-  router.push({ path: `/counselor/sessions/${session.id}`, state: { session } })
+  const plainSession = JSON.parse(JSON.stringify(session))
+  router.push({ path: `/counselor/sessions/${plainSession.id}`, state: { session: plainSession } })
 }
 
 async function quickAction(apt, action) {

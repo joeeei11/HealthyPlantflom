@@ -159,7 +159,10 @@ function showToast(msg) {
 }
 
 function goToDetail(session) {
-  router.push({ path: `/counselor/sessions/${session.id}`, state: { session } })
+  // JSON roundtrip converts Vue reactive Proxy to plain object,
+  // preventing history.pushState serialization failure
+  const plainSession = JSON.parse(JSON.stringify(session))
+  router.push({ path: `/counselor/sessions/${plainSession.id}`, state: { session: plainSession } })
 }
 
 function openEndDialog(session) {
